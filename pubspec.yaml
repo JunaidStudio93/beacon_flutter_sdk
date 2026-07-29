@@ -1,0 +1,35 @@
+name: beacon_flutter_sdk
+description: Beacon event tracking SDK for Flutter with Drift-backed batching.
+version: 0.0.1
+homepage:
+
+environment:
+  sdk: ^3.10.7
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Pin drift <2.32 so sqlite3 stays on 2.x (no build hooks).
+  drift: ^2.28.0
+  flutter_timezone: ^4.1.0
+  http: ^1.4.0
+  package_info_plus: ^8.3.0
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  sqlite3: ^2.9.0
+  sqlite3_flutter_libs: ^0.5.32
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.28.0
+  build_runner: ^2.4.15
+
+dependency_overrides:
+  # objective_c >=9 ships build hooks that break build_runner AOT on Dart 3.10.
+  objective_c: 8.0.0
+
+flutter:
