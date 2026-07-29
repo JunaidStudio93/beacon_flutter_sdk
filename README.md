@@ -4,7 +4,7 @@ Event tracking SDK for Flutter with Drift-backed local batching.
 
 ## Features
 
-- Initialize with an API key and configurable batch size
+- Initialize with an API key, base URL, and configurable batch size
 - Persist events locally with Drift (SQLite) until the batch limit
 - Flush automatically when the batch size is reached
 - Optional `immediate: true` to upload without waiting for the batch
@@ -23,6 +23,7 @@ Future<void> main() async {
 
   await Beacon.initialize(
     apiKey: 'bcn_live_sk_...',
+    baseUrl: 'https://your-beacon-endpoint.example.com',
     batchSize: 10,
   );
 
@@ -57,7 +58,7 @@ await Beacon.instance.push(
 await Beacon.instance.flush();
 ```
 
-Events are `POST`ed to the static Beacon endpoint `/track` with header `x-api-key`.
+Events are `POST`ed to `{baseUrl}/track` with header `x-api-key`.
 A successful response is HTTP **202**; otherwise events stay in the local DB for the next flush.
 
 ## Additional information

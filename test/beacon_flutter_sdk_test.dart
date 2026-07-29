@@ -49,6 +49,7 @@ void main() {
 
       await Beacon.initialize(
         apiKey: 'test_key',
+        baseUrl: 'https://example.com',
         batchSize: 3,
         httpClient: client,
         database: BeaconDatabase.memory(),
@@ -88,6 +89,7 @@ void main() {
 
       await Beacon.initialize(
         apiKey: 'test_key',
+        baseUrl: 'https://example.com',
         batchSize: 2,
         httpClient: client,
         database: BeaconDatabase.memory(),
@@ -139,6 +141,7 @@ void main() {
 
       await Beacon.initialize(
         apiKey: 'test_key',
+        baseUrl: 'https://example.com',
         batchSize: 10,
         httpClient: client,
         database: BeaconDatabase.memory(),
@@ -169,6 +172,7 @@ void main() {
 
       await Beacon.initialize(
         apiKey: 'test_key',
+        baseUrl: 'https://example.com',
         batchSize: 1,
         httpClient: client,
         database: BeaconDatabase.memory(),

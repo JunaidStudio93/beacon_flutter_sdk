@@ -52,6 +52,7 @@ class Beacon {
   /// replace the previous instance after closing its database.
   static Future<Beacon> initialize({
     required String apiKey,
+    required String baseUrl,
     int batchSize = 10,
     http.Client? httpClient,
     BeaconDatabase? database,
@@ -59,6 +60,9 @@ class Beacon {
   }) async {
     if (apiKey.trim().isEmpty) {
       throw ArgumentError.value(apiKey, 'apiKey', 'must not be empty');
+    }
+    if (baseUrl.trim().isEmpty) {
+      throw ArgumentError.value(baseUrl, 'baseUrl', 'must not be empty');
     }
     if (batchSize < 1) {
       throw ArgumentError.value(batchSize, 'batchSize', 'must be >= 1');
@@ -72,6 +76,7 @@ class Beacon {
 
     final config = BeaconConfig(
       apiKey: apiKey,
+      baseUrl: baseUrl.trim(),
       batchSize: batchSize,
       sessionToken: const Uuid().v4(),
     );
