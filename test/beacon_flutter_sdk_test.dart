@@ -54,7 +54,6 @@ void main() {
         httpClient: client,
         database: BeaconDatabase.memory(),
         deviceContext: const DeviceContext(
-          country: 'US',
           platform: 'test',
           appVersion: '1.0.0',
           timezone: 'UTC',
@@ -94,7 +93,6 @@ void main() {
         httpClient: client,
         database: BeaconDatabase.memory(),
         deviceContext: const DeviceContext(
-          country: 'US',
           platform: 'test',
           appVersion: '1.0.0',
           timezone: 'UTC',
@@ -146,7 +144,6 @@ void main() {
         httpClient: client,
         database: BeaconDatabase.memory(),
         deviceContext: const DeviceContext(
-          country: 'US',
           platform: 'test',
           appVersion: '1.0.0',
           timezone: 'UTC',
@@ -177,7 +174,6 @@ void main() {
         httpClient: client,
         database: BeaconDatabase.memory(),
         deviceContext: const DeviceContext(
-          country: 'US',
           platform: 'test',
           appVersion: '1.0.0',
           timezone: 'UTC',

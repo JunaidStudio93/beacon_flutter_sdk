@@ -9,7 +9,6 @@ import 'device_context.dart';
 /// Resolves device/app context once at SDK init.
 Future<DeviceContext> resolveDeviceContext() async {
   final platform = kIsWeb ? 'web' : Platform.operatingSystem;
-  final country = PlatformDispatcher.instance.locale.countryCode ?? '';
 
   String appVersion;
   try {
@@ -27,7 +26,6 @@ Future<DeviceContext> resolveDeviceContext() async {
   }
 
   return DeviceContext(
-    country: country,
     platform: platform,
     appVersion: appVersion,
     timezone: timezone,

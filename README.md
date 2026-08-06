@@ -9,7 +9,8 @@ Event tracking SDK for Flutter with Drift-backed local batching.
 - Flush automatically when the batch size is reached
 - Optional `immediate: true` to upload without waiting for the batch
 - Manual `flush()` for app lifecycle (background / dispose)
-- Auto-attaches platform, country, app version, and timezone
+- Auto-attaches platform, app version, and timezone
+- Country is set server-side from the request IP (not by the SDK)
 
 ## Getting started
 
