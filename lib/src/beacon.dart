@@ -150,6 +150,26 @@ class Beacon {
     return current;
   }
 
+  /// Uploads everything pending, then starts a new session.
+  ///
+  /// Runs on the same lock as [flush], so no push or flush can interleave
+  /// between the upload and the new token. Events queued before the call keep
+  /// the previous token — including events the upload failed to deliver, which
+  /// stay queued and are retried under the session they belong to.
+  Future<void> refresh() {
+    final previous = _flushLock;
+    late Future<void> current;
+    current = previous.then((_) async {
+      await _flushInternal();
+      _config.regenerateSession();
+    });
+    _flushLock = current.catchError((_) {});
+    return current;
+  }
+
+  /// The token attached to events pushed from now on. Changes on [refresh].
+  String get sessionToken => _config.sessionToken;
+
   Future<void> _flushInternal() async {
     final rows = await _database.allPending();
     if (rows.isEmpty) return;

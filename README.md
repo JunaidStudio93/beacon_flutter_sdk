@@ -9,6 +9,7 @@ Event tracking SDK for Flutter with Drift-backed local batching.
 - Flush automatically when the batch size is reached
 - Optional `immediate: true` to upload without waiting for the batch
 - Manual `flush()` for app lifecycle (background / dispose)
+- `refresh()` to upload everything pending and start a new session
 - Auto-attaches platform, app version, and timezone
 - Country is set server-side from the request IP (not by the SDK)
 
@@ -57,6 +58,11 @@ await Beacon.instance.push(
 
 // Flush leftover events (e.g. on app pause)
 await Beacon.instance.flush();
+
+// End the current session: upload everything pending, then start a new one.
+// Events keep the token they were pushed under; the new session starts even
+// if the upload failed.
+await Beacon.instance.refresh();
 ```
 
 Events are `POST`ed to `{baseUrl}/track` with header `x-api-key`.

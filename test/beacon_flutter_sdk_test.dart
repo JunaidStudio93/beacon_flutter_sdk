@@ -192,4 +192,131 @@ void main() {
       expect(postCount, 2);
     });
   });
+
+  group('Beacon refresh', () {
+    tearDown(() async {
+      if (Beacon.isInitialized) {
+        await Beacon.instance.dispose();
+      }
+    });
+
+    test('uploads pending events and starts a new session', () async {
+      var postCount = 0;
+      final batches = <List<dynamic>>[];
+      final client = MockClient((request) async {
+        postCount++;
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        batches.add(body['events'] as List<dynamic>);
+        return http.Response('', 202);
+      });
+
+      await Beacon.initialize(
+        apiKey: 'test_key',
+        baseUrl: 'https://example.com',
+        batchSize: 100, // high, so only refresh triggers the upload
+        httpClient: client,
+        database: BeaconDatabase.memory(),
+        deviceContext: const DeviceContext(
+          platform: 'test',
+          appVersion: '1.0.0',
+          timezone: 'UTC',
+        ),
+      );
+
+      final firstSession = Beacon.instance.sessionToken;
+
+      await Beacon.instance.push(
+        eventName: 'one',
+        funnel: 'f',
+        type: 't',
+      );
+      await Beacon.instance.push(
+        eventName: 'two',
+        funnel: 'f',
+        type: 't',
+      );
+      expect(postCount, 0);
+
+      await Beacon.instance.refresh();
+
+      // Everything pending went up, under the session it was pushed in.
+      expect(postCount, 1);
+      expect(batches[0], hasLength(2));
+      for (final event in batches[0]) {
+        expect((event as Map<String, dynamic>)['sessionToken'], firstSession);
+      }
+
+      // A new session token is now in effect.
+      final secondSession = Beacon.instance.sessionToken;
+      expect(secondSession, isNot(firstSession));
+
+      // Events pushed after refresh carry the new token.
+      await Beacon.instance.push(
+        eventName: 'three',
+        funnel: 'f',
+        type: 't',
+      );
+      await Beacon.instance.flush();
+      expect(postCount, 2);
+      expect(
+        (batches[1][0] as Map<String, dynamic>)['sessionToken'],
+        secondSession,
+      );
+    });
+
+    test('starts the new session even when the upload fails', () async {
+      final statuses = <int>[500, 202];
+      final batches = <List<dynamic>>[];
+      final client = MockClient((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        batches.add(body['events'] as List<dynamic>);
+        final status = statuses.isEmpty ? 202 : statuses.removeAt(0);
+        return http.Response('', status);
+      });
+
+      await Beacon.initialize(
+        apiKey: 'test_key',
+        baseUrl: 'https://example.com',
+        batchSize: 100,
+        httpClient: client,
+        database: BeaconDatabase.memory(),
+        deviceContext: const DeviceContext(
+          platform: 'test',
+          appVersion: '1.0.0',
+          timezone: 'UTC',
+        ),
+      );
+
+      final firstSession = Beacon.instance.sessionToken;
+      await Beacon.instance.push(
+        eventName: 'stranded',
+        funnel: 'f',
+        type: 't',
+      );
+
+      await Beacon.instance.refresh();
+
+      final secondSession = Beacon.instance.sessionToken;
+      expect(secondSession, isNot(firstSession));
+
+      // The undelivered event stayed queued and still belongs to session one.
+      await Beacon.instance.push(
+        eventName: 'fresh',
+        funnel: 'f',
+        type: 't',
+      );
+      await Beacon.instance.flush();
+
+      final retried = batches[1];
+      expect(retried, hasLength(2));
+      expect(
+        (retried[0] as Map<String, dynamic>)['sessionToken'],
+        firstSession,
+      );
+      expect(
+        (retried[1] as Map<String, dynamic>)['sessionToken'],
+        secondSession,
+      );
+    });
+  });
 }

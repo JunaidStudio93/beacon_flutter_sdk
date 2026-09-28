@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 /// Runtime Beacon configuration and session state.
 class BeaconConfig {
   BeaconConfig({
@@ -10,7 +12,15 @@ class BeaconConfig {
   final String apiKey;
   final String baseUrl;
   final int batchSize;
-  final String sessionToken;
+
+  /// Mutable: [Beacon.refresh] starts a new session by replacing this.
+  /// Events carry the token that was current when they were pushed.
+  String sessionToken;
+
+  /// Starts a new session. Events already queued keep the previous token.
+  void regenerateSession() {
+    sessionToken = const Uuid().v4();
+  }
 
   Uri get trackUri {
     final normalized = baseUrl.endsWith('/')
