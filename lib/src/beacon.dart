@@ -167,6 +167,47 @@ class Beacon {
     return current;
   }
 
+  /// Attaches a real email to a device's anonymous event history.
+  ///
+  /// While the user is logged out the app has no email to send, so it puts its
+  /// device id in the `email` field of every event. Call this once the user
+  /// signs in and the backend rewrites that history onto [email], joining the
+  /// anonymous and logged-in halves into a single user.
+  ///
+  /// Flushes first, on the same lock as [flush]: events still queued locally
+  /// were pushed under the device id, and the server-side rewrite only sees
+  /// what has already arrived. Uploading them before the rewrite runs is what
+  /// keeps them from being stranded under the old identity.
+  ///
+  /// Like [push] and [flush], a network or server failure is logged rather
+  /// than thrown — analytics must never break the calling app. Throws only on
+  /// invalid arguments, which are programming errors.
+  Future<void> identify(String deviceId, String email) {
+    if (deviceId.trim().isEmpty) {
+      throw ArgumentError.value(deviceId, 'deviceId', 'must not be empty');
+    }
+    if (email.trim().isEmpty) {
+      throw ArgumentError.value(email, 'email', 'must not be empty');
+    }
+
+    final previous = _flushLock;
+    late Future<void> current;
+    current = previous.then((_) async {
+      await _flushInternal();
+      try {
+        final accepted =
+            await _uploader.identify(deviceId.trim(), email.trim());
+        if (!accepted) {
+          log('Beacon: identify rejected (non-202)');
+        }
+      } catch (e, st) {
+        log('Beacon: identify failed', error: e, stackTrace: st);
+      }
+    });
+    _flushLock = current.catchError((_) {});
+    return current;
+  }
+
   /// The token attached to events pushed from now on. Changes on [refresh].
   String get sessionToken => _config.sessionToken;
 

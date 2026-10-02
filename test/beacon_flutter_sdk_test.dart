@@ -319,4 +319,140 @@ void main() {
       );
     });
   });
+
+  group('Beacon identify', () {
+    const ctx = DeviceContext(
+      platform: 'test',
+      appVersion: '1.0.0',
+      timezone: 'UTC',
+    );
+
+    tearDown(() async {
+      if (Beacon.isInitialized) {
+        await Beacon.instance.dispose();
+      }
+    });
+
+    Future<void> init(http.Client client) => Beacon.initialize(
+          apiKey: 'test_key',
+          baseUrl: 'https://example.com',
+          batchSize: 100, // high, so nothing auto-flushes mid-test
+          httpClient: client,
+          database: BeaconDatabase.memory(),
+          deviceContext: ctx,
+        );
+
+    test('posts deviceId and email to /identify with the api key', () async {
+      final calls = <http.Request>[];
+      final client = MockClient((request) async {
+        calls.add(request);
+        return http.Response('', 202);
+      });
+
+      await init(client);
+      await Beacon.instance.identify('device_abc', 'user@example.com');
+
+      final identifyCalls =
+          calls.where((c) => c.url.path.endsWith('/identify')).toList();
+      expect(identifyCalls, hasLength(1));
+      expect(identifyCalls.first.headers['x-api-key'], 'test_key');
+      expect(
+        jsonDecode(identifyCalls.first.body),
+        {'deviceId': 'device_abc', 'email': 'user@example.com'},
+      );
+    });
+
+    test('uploads queued events before asking for the rewrite', () async {
+      final order = <String>[];
+      final client = MockClient((request) async {
+        order.add(request.url.path.endsWith('/identify') ? 'identify' : 'track');
+        return http.Response('', 202);
+      });
+
+      final db = BeaconDatabase.memory();
+      await Beacon.initialize(
+        apiKey: 'test_key',
+        baseUrl: 'https://example.com',
+        batchSize: 100,
+        httpClient: client,
+        database: db,
+        deviceContext: ctx,
+      );
+
+      await Beacon.instance.push(
+        eventName: 'anon_view',
+        funnel: 'onboarding',
+        type: 'nav',
+        email: 'device_abc',
+      );
+      expect(await db.pendingCount(), 1);
+
+      await Beacon.instance.identify('device_abc', 'user@example.com');
+
+      // The queued event must reach the server BEFORE the rewrite runs,
+      // otherwise it lands after the UPDATE and keeps the device id forever.
+      expect(order, ['track', 'identify']);
+      expect(await db.pendingCount(), 0);
+    });
+
+    test('trims both arguments', () async {
+      final calls = <http.Request>[];
+      final client = MockClient((request) async {
+        calls.add(request);
+        return http.Response('', 202);
+      });
+
+      await init(client);
+      await Beacon.instance.identify('  device_abc  ', '  user@example.com  ');
+
+      final body = jsonDecode(
+        calls.firstWhere((c) => c.url.path.endsWith('/identify')).body,
+      );
+      expect(body, {'deviceId': 'device_abc', 'email': 'user@example.com'});
+    });
+
+    test('rejects empty arguments', () async {
+      await init(MockClient((_) async => http.Response('', 202)));
+
+      expect(
+        () => Beacon.instance.identify('   ', 'user@example.com'),
+        throwsArgumentError,
+      );
+      expect(
+        () => Beacon.instance.identify('device_abc', '  '),
+        throwsArgumentError,
+      );
+    });
+
+    test('does not throw when the server rejects', () async {
+      await init(MockClient((request) async {
+        return http.Response('', request.url.path.endsWith('/identify') ? 500 : 202);
+      }));
+
+      await expectLater(
+        Beacon.instance.identify('device_abc', 'user@example.com'),
+        completes,
+      );
+    });
+
+    test('does not throw when the network fails', () async {
+      await init(MockClient((request) async {
+        if (request.url.path.endsWith('/identify')) {
+          throw const SocketExceptionStub();
+        }
+        return http.Response('', 202);
+      }));
+
+      await expectLater(
+        Beacon.instance.identify('device_abc', 'user@example.com'),
+        completes,
+      );
+    });
+  });
+}
+
+/// Stand-in for a transport failure; MockClient has no built-in way to throw
+/// a network error, and the SDK only cares that *something* was thrown.
+class SocketExceptionStub implements Exception {
+  const SocketExceptionStub();
 }

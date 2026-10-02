@@ -22,10 +22,11 @@ class BeaconConfig {
     sessionToken = const Uuid().v4();
   }
 
-  Uri get trackUri {
-    final normalized = baseUrl.endsWith('/')
-        ? baseUrl.substring(0, baseUrl.length - 1)
-        : baseUrl;
-    return Uri.parse('$normalized/track');
-  }
+  String get _origin => baseUrl.endsWith('/')
+      ? baseUrl.substring(0, baseUrl.length - 1)
+      : baseUrl;
+
+  Uri get trackUri => Uri.parse('$_origin/track');
+
+  Uri get identifyUri => Uri.parse('$_origin/identify');
 }

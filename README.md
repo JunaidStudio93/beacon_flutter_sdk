@@ -10,6 +10,7 @@ Event tracking SDK for Flutter with Drift-backed local batching.
 - Optional `immediate: true` to upload without waiting for the batch
 - Manual `flush()` for app lifecycle (background / dispose)
 - `refresh()` to upload everything pending and start a new session
+- `identify()` to attach a real email to a device's anonymous history on sign-in
 - Auto-attaches platform, app version, and timezone
 - Country is set server-side from the request IP (not by the SDK)
 
@@ -64,6 +65,43 @@ await Beacon.instance.flush();
 // if the upload failed.
 await Beacon.instance.refresh();
 ```
+
+## Anonymous users
+
+While nobody is signed in there is no email to send, so pass the device id in
+the `email` field:
+
+```dart
+await Beacon.instance.push(
+  eventName: 'screen_view',
+  funnel: 'onboarding',
+  type: 'navigation',
+  email: deviceId, // stands in for the real email until sign-in
+);
+```
+
+`email` is the identity column every dashboard aggregate groups by, so each
+device counts as its own user rather than collapsing into one anonymous blob.
+
+When the user signs in, hand over the real email:
+
+```dart
+await Beacon.instance.identify(deviceId, user.email);
+```
+
+The backend rewrites every event already recorded under that device id onto the
+real email, so the anonymous and signed-in halves become one user. Events
+pushed after this call should carry the real email directly.
+
+Notes:
+
+- The rewrite is asynchronous. The call returns as soon as the server accepts
+  it; the dashboard catches up a few seconds later.
+- It flushes the local queue first, so events still waiting to upload are not
+  stranded under the old identity.
+- Nothing is retried. A failure is logged, never thrown — analytics must not
+  break sign-in.
+- The backend only looks back 90 days by default (`IDENTIFY_LOOKBACK_DAYS`).
 
 Events are `POST`ed to `{baseUrl}/track` with header `x-api-key`.
 A successful response is HTTP **202**; otherwise events stay in the local DB for the next flush.
