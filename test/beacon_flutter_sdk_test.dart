@@ -342,7 +342,7 @@ void main() {
           deviceContext: ctx,
         );
 
-    test('posts deviceId and email to /identify with the api key', () async {
+    test('posts deviceId, email and uid to /identify with the api key', () async {
       final calls = <http.Request>[];
       final client = MockClient((request) async {
         calls.add(request);
@@ -350,7 +350,7 @@ void main() {
       });
 
       await init(client);
-      await Beacon.instance.identify('device_abc', 'user@example.com');
+      await Beacon.instance.identify('device_abc', 'user@example.com', 'uid_123');
 
       final identifyCalls =
           calls.where((c) => c.url.path.endsWith('/identify')).toList();
@@ -358,7 +358,7 @@ void main() {
       expect(identifyCalls.first.headers['x-api-key'], 'test_key');
       expect(
         jsonDecode(identifyCalls.first.body),
-        {'deviceId': 'device_abc', 'email': 'user@example.com'},
+        {'deviceId': 'device_abc', 'email': 'user@example.com', 'uid': 'uid_123'},
       );
     });
 
@@ -387,7 +387,7 @@ void main() {
       );
       expect(await db.pendingCount(), 1);
 
-      await Beacon.instance.identify('device_abc', 'user@example.com');
+      await Beacon.instance.identify('device_abc', 'user@example.com', 'uid_123');
 
       // The queued event must reach the server BEFORE the rewrite runs,
       // otherwise it lands after the UPDATE and keeps the device id forever.
@@ -403,23 +403,30 @@ void main() {
       });
 
       await init(client);
-      await Beacon.instance.identify('  device_abc  ', '  user@example.com  ');
+      await Beacon.instance.identify('  device_abc  ', '  user@example.com  ', '  uid_123  ');
 
       final body = jsonDecode(
         calls.firstWhere((c) => c.url.path.endsWith('/identify')).body,
       );
-      expect(body, {'deviceId': 'device_abc', 'email': 'user@example.com'});
+      expect(
+        body,
+        {'deviceId': 'device_abc', 'email': 'user@example.com', 'uid': 'uid_123'},
+      );
     });
 
     test('rejects empty arguments', () async {
       await init(MockClient((_) async => http.Response('', 202)));
 
       expect(
-        () => Beacon.instance.identify('   ', 'user@example.com'),
+        () => Beacon.instance.identify('   ', 'user@example.com', 'uid_123'),
         throwsArgumentError,
       );
       expect(
-        () => Beacon.instance.identify('device_abc', '  '),
+        () => Beacon.instance.identify('device_abc', '  ', 'uid_123'),
+        throwsArgumentError,
+      );
+      expect(
+        () => Beacon.instance.identify('device_abc', 'user@example.com', '  '),
         throwsArgumentError,
       );
     });
@@ -430,7 +437,7 @@ void main() {
       }));
 
       await expectLater(
-        Beacon.instance.identify('device_abc', 'user@example.com'),
+        Beacon.instance.identify('device_abc', 'user@example.com', 'uid_123'),
         completes,
       );
     });
@@ -444,7 +451,7 @@ void main() {
       }));
 
       await expectLater(
-        Beacon.instance.identify('device_abc', 'user@example.com'),
+        Beacon.instance.identify('device_abc', 'user@example.com', 'uid_123'),
         completes,
       );
     });

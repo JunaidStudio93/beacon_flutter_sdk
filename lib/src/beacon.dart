@@ -167,12 +167,12 @@ class Beacon {
     return current;
   }
 
-  /// Attaches a real email to a device's anonymous event history.
+  /// Attaches a real email and uid to a device's anonymous event history.
   ///
   /// While the user is logged out the app has no email to send, so it puts its
-  /// device id in the `email` field of every event. Call this once the user
-  /// signs in and the backend rewrites that history onto [email], joining the
-  /// anonymous and logged-in halves into a single user.
+  /// device id in the `email` and `uid` fields of every event. Call this once
+  /// the user signs in and the backend rewrites that history onto [email] and
+  /// [uid], joining the anonymous and logged-in halves into a single user.
   ///
   /// Flushes first, on the same lock as [flush]: events still queued locally
   /// were pushed under the device id, and the server-side rewrite only sees
@@ -182,12 +182,15 @@ class Beacon {
   /// Like [push] and [flush], a network or server failure is logged rather
   /// than thrown — analytics must never break the calling app. Throws only on
   /// invalid arguments, which are programming errors.
-  Future<void> identify(String deviceId, String email) {
+  Future<void> identify(String deviceId, String email, String uid) {
     if (deviceId.trim().isEmpty) {
       throw ArgumentError.value(deviceId, 'deviceId', 'must not be empty');
     }
     if (email.trim().isEmpty) {
       throw ArgumentError.value(email, 'email', 'must not be empty');
+    }
+    if (uid.trim().isEmpty) {
+      throw ArgumentError.value(uid, 'uid', 'must not be empty');
     }
 
     final previous = _flushLock;
@@ -195,8 +198,11 @@ class Beacon {
     current = previous.then((_) async {
       await _flushInternal();
       try {
-        final accepted =
-            await _uploader.identify(deviceId.trim(), email.trim());
+        final accepted = await _uploader.identify(
+          deviceId.trim(),
+          email.trim(),
+          uid.trim(),
+        );
         if (!accepted) {
           log('Beacon: identify rejected (non-202)');
         }

@@ -10,7 +10,7 @@ Event tracking SDK for Flutter with Drift-backed local batching.
 - Optional `immediate: true` to upload without waiting for the batch
 - Manual `flush()` for app lifecycle (background / dispose)
 - `refresh()` to upload everything pending and start a new session
-- `identify()` to attach a real email to a device's anonymous history on sign-in
+- `identify()` to attach a real email and uid to a device's anonymous history on sign-in
 - Auto-attaches platform, app version, and timezone
 - Country is set server-side from the request IP (not by the SDK)
 
@@ -86,7 +86,7 @@ device counts as its own user rather than collapsing into one anonymous blob.
 When the user signs in, hand over the real email:
 
 ```dart
-await Beacon.instance.identify(deviceId, user.email);
+await Beacon.instance.identify(deviceId, user.email, user.uid);
 ```
 
 The backend rewrites every event already recorded under that device id onto the
