@@ -22,6 +22,18 @@ class $PendingEventsTable extends PendingEvents
       'PRIMARY KEY AUTOINCREMENT',
     ),
   );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _eventNameMeta = const VerificationMeta(
     'eventName',
   );
@@ -96,6 +108,7 @@ class $PendingEventsTable extends PendingEvents
   @override
   List<GeneratedColumn> get $columns => [
     id,
+    eventId,
     eventName,
     funnel,
     uid,
@@ -118,6 +131,12 @@ class $PendingEventsTable extends PendingEvents
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
     }
     if (data.containsKey('event_name')) {
       context.handle(
@@ -194,6 +213,10 @@ class $PendingEventsTable extends PendingEvents
         DriftSqlType.int,
         data['${effectivePrefix}id'],
       )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
       eventName: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}event_name'],
@@ -233,6 +256,14 @@ class $PendingEventsTable extends PendingEvents
 
 class PendingEvent extends DataClass implements Insertable<PendingEvent> {
   final int id;
+
+  /// Stable identifier for the event itself, assigned when it was created.
+  /// Unlike [id] (a local row number) this survives a resend, which is what
+  /// lets the backend recognize a duplicate upload.
+  ///
+  /// Defaulted so the v1 -> v2 migration can add the column to tables that
+  /// already hold rows; [Beacon.push] always supplies a real value.
+  final String eventId;
   final String eventName;
   final String funnel;
   final String uid;
@@ -242,6 +273,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
   final String propertiesJson;
   const PendingEvent({
     required this.id,
+    required this.eventId,
     required this.eventName,
     required this.funnel,
     required this.uid,
@@ -254,6 +286,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['event_id'] = Variable<String>(eventId);
     map['event_name'] = Variable<String>(eventName);
     map['funnel'] = Variable<String>(funnel);
     map['uid'] = Variable<String>(uid);
@@ -267,6 +300,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
   PendingEventsCompanion toCompanion(bool nullToAbsent) {
     return PendingEventsCompanion(
       id: Value(id),
+      eventId: Value(eventId),
       eventName: Value(eventName),
       funnel: Value(funnel),
       uid: Value(uid),
@@ -284,6 +318,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PendingEvent(
       id: serializer.fromJson<int>(json['id']),
+      eventId: serializer.fromJson<String>(json['eventId']),
       eventName: serializer.fromJson<String>(json['eventName']),
       funnel: serializer.fromJson<String>(json['funnel']),
       uid: serializer.fromJson<String>(json['uid']),
@@ -298,6 +333,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'eventId': serializer.toJson<String>(eventId),
       'eventName': serializer.toJson<String>(eventName),
       'funnel': serializer.toJson<String>(funnel),
       'uid': serializer.toJson<String>(uid),
@@ -310,6 +346,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
 
   PendingEvent copyWith({
     int? id,
+    String? eventId,
     String? eventName,
     String? funnel,
     String? uid,
@@ -319,6 +356,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
     String? propertiesJson,
   }) => PendingEvent(
     id: id ?? this.id,
+    eventId: eventId ?? this.eventId,
     eventName: eventName ?? this.eventName,
     funnel: funnel ?? this.funnel,
     uid: uid ?? this.uid,
@@ -330,6 +368,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
   PendingEvent copyWithCompanion(PendingEventsCompanion data) {
     return PendingEvent(
       id: data.id.present ? data.id.value : this.id,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
       eventName: data.eventName.present ? data.eventName.value : this.eventName,
       funnel: data.funnel.present ? data.funnel.value : this.funnel,
       uid: data.uid.present ? data.uid.value : this.uid,
@@ -348,6 +387,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
   String toString() {
     return (StringBuffer('PendingEvent(')
           ..write('id: $id, ')
+          ..write('eventId: $eventId, ')
           ..write('eventName: $eventName, ')
           ..write('funnel: $funnel, ')
           ..write('uid: $uid, ')
@@ -362,6 +402,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
   @override
   int get hashCode => Object.hash(
     id,
+    eventId,
     eventName,
     funnel,
     uid,
@@ -375,6 +416,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
       identical(this, other) ||
       (other is PendingEvent &&
           other.id == this.id &&
+          other.eventId == this.eventId &&
           other.eventName == this.eventName &&
           other.funnel == this.funnel &&
           other.uid == this.uid &&
@@ -386,6 +428,7 @@ class PendingEvent extends DataClass implements Insertable<PendingEvent> {
 
 class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
   final Value<int> id;
+  final Value<String> eventId;
   final Value<String> eventName;
   final Value<String> funnel;
   final Value<String> uid;
@@ -395,6 +438,7 @@ class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
   final Value<String> propertiesJson;
   const PendingEventsCompanion({
     this.id = const Value.absent(),
+    this.eventId = const Value.absent(),
     this.eventName = const Value.absent(),
     this.funnel = const Value.absent(),
     this.uid = const Value.absent(),
@@ -405,6 +449,7 @@ class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
   });
   PendingEventsCompanion.insert({
     this.id = const Value.absent(),
+    this.eventId = const Value.absent(),
     required String eventName,
     required String funnel,
     required String uid,
@@ -421,6 +466,7 @@ class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
        propertiesJson = Value(propertiesJson);
   static Insertable<PendingEvent> custom({
     Expression<int>? id,
+    Expression<String>? eventId,
     Expression<String>? eventName,
     Expression<String>? funnel,
     Expression<String>? uid,
@@ -431,6 +477,7 @@ class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (eventId != null) 'event_id': eventId,
       if (eventName != null) 'event_name': eventName,
       if (funnel != null) 'funnel': funnel,
       if (uid != null) 'uid': uid,
@@ -443,6 +490,7 @@ class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
 
   PendingEventsCompanion copyWith({
     Value<int>? id,
+    Value<String>? eventId,
     Value<String>? eventName,
     Value<String>? funnel,
     Value<String>? uid,
@@ -453,6 +501,7 @@ class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
   }) {
     return PendingEventsCompanion(
       id: id ?? this.id,
+      eventId: eventId ?? this.eventId,
       eventName: eventName ?? this.eventName,
       funnel: funnel ?? this.funnel,
       uid: uid ?? this.uid,
@@ -468,6 +517,9 @@ class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<int>(id.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
     }
     if (eventName.present) {
       map['event_name'] = Variable<String>(eventName.value);
@@ -497,6 +549,7 @@ class PendingEventsCompanion extends UpdateCompanion<PendingEvent> {
   String toString() {
     return (StringBuffer('PendingEventsCompanion(')
           ..write('id: $id, ')
+          ..write('eventId: $eventId, ')
           ..write('eventName: $eventName, ')
           ..write('funnel: $funnel, ')
           ..write('uid: $uid, ')
@@ -523,6 +576,7 @@ abstract class _$BeaconDatabase extends GeneratedDatabase {
 typedef $$PendingEventsTableCreateCompanionBuilder =
     PendingEventsCompanion Function({
       Value<int> id,
+      Value<String> eventId,
       required String eventName,
       required String funnel,
       required String uid,
@@ -534,6 +588,7 @@ typedef $$PendingEventsTableCreateCompanionBuilder =
 typedef $$PendingEventsTableUpdateCompanionBuilder =
     PendingEventsCompanion Function({
       Value<int> id,
+      Value<String> eventId,
       Value<String> eventName,
       Value<String> funnel,
       Value<String> uid,
@@ -554,6 +609,11 @@ class $$PendingEventsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -607,6 +667,11 @@ class $$PendingEventsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get eventName => $composableBuilder(
     column: $table.eventName,
     builder: (column) => ColumnOrderings(column),
@@ -654,6 +719,9 @@ class $$PendingEventsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
 
   GeneratedColumn<String> get eventName =>
       $composableBuilder(column: $table.eventName, builder: (column) => column);
@@ -715,6 +783,7 @@ class $$PendingEventsTableTableManager
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
                 Value<String> eventName = const Value.absent(),
                 Value<String> funnel = const Value.absent(),
                 Value<String> uid = const Value.absent(),
@@ -724,6 +793,7 @@ class $$PendingEventsTableTableManager
                 Value<String> propertiesJson = const Value.absent(),
               }) => PendingEventsCompanion(
                 id: id,
+                eventId: eventId,
                 eventName: eventName,
                 funnel: funnel,
                 uid: uid,
@@ -735,6 +805,7 @@ class $$PendingEventsTableTableManager
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
                 required String eventName,
                 required String funnel,
                 required String uid,
@@ -744,6 +815,7 @@ class $$PendingEventsTableTableManager
                 required String propertiesJson,
               }) => PendingEventsCompanion.insert(
                 id: id,
+                eventId: eventId,
                 eventName: eventName,
                 funnel: funnel,
                 uid: uid,

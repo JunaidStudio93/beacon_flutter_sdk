@@ -3,6 +3,7 @@ import 'dart:convert';
 /// Event payload sent to the Beacon `/track` endpoint.
 class BeaconEvent {
   const BeaconEvent({
+    required this.eventId,
     required this.eventName,
     required this.uid,
     required this.funnel,
@@ -12,6 +13,10 @@ class BeaconEvent {
     required this.properties,
   });
 
+  /// Stable per-event identifier, generated once when the event is created
+  /// and persisted with it. A retried upload carries the same [eventId], so
+  /// the backend can drop the repeat instead of counting it twice.
+  final String eventId;
   final String eventName;
   final String uid;
   final String funnel;
@@ -21,6 +26,7 @@ class BeaconEvent {
   final Map<String, dynamic> properties;
 
   Map<String, dynamic> toJson() => {
+        'eventId': eventId,
         'eventName': eventName,
         'uid': uid,
         'funnel': funnel,
@@ -31,6 +37,7 @@ class BeaconEvent {
       };
 
   factory BeaconEvent.fromStored({
+    required String eventId,
     required String eventName,
     required String uid,
     required String funnel,
@@ -41,6 +48,7 @@ class BeaconEvent {
   }) {
     final decoded = jsonDecode(propertiesJson);
     return BeaconEvent(
+      eventId: eventId,
       eventName: eventName,
       uid: uid,
       funnel: funnel,

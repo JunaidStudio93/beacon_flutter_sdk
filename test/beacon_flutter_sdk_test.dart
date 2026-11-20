@@ -4,9 +4,11 @@ import 'package:beacon_flutter_sdk/beacon_flutter_sdk.dart';
 import 'package:beacon_flutter_sdk/src/db/beacon_database.dart';
 import 'package:beacon_flutter_sdk/src/device_context.dart';
 import 'package:beacon_flutter_sdk/src/sanitize.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   group('sanitizeName', () {
@@ -456,10 +458,150 @@ void main() {
       );
     });
   });
+
+  group('event ids', () {
+    tearDown(() async {
+      if (Beacon.isInitialized) {
+        await Beacon.instance.dispose();
+      }
+    });
+
+    const context = DeviceContext(
+      platform: 'test',
+      appVersion: '1.0.0',
+      timezone: 'UTC',
+    );
+
+    test('every event carries a distinct id', () async {
+      List<dynamic>? sent;
+      final client = MockClient((request) async {
+        sent = (jsonDecode(request.body) as Map<String, dynamic>)['events']
+            as List<dynamic>;
+        return http.Response('', 202);
+      });
+
+      await Beacon.initialize(
+        apiKey: 'test_key',
+        baseUrl: 'https://example.com',
+        batchSize: 2,
+        httpClient: client,
+        database: BeaconDatabase.memory(),
+        deviceContext: context,
+      );
+
+      await Beacon.instance.push(eventName: 'one', funnel: 'f', type: 't');
+      await Beacon.instance.push(eventName: 'two', funnel: 'f', type: 't');
+
+      final ids = sent!
+          .map((e) => (e as Map<String, dynamic>)['eventId'] as String)
+          .toList();
+      expect(ids, hasLength(2));
+      for (final id in ids) {
+        expect(id, matches(_uuidV4));
+      }
+      expect(ids.toSet(), hasLength(2));
+    });
+
+    test('a resend carries the id the event was created with', () async {
+      // The duplicate case from production: the app is suspended before the
+      // 202 lands, the row is never deleted, and the next launch resends it.
+      final batches = <List<dynamic>>[];
+      var status = 500;
+      final client = MockClient((request) async {
+        batches.add(
+          (jsonDecode(request.body) as Map<String, dynamic>)['events']
+              as List<dynamic>,
+        );
+        return http.Response('', status);
+      });
+
+      final database = _PersistentDatabase();
+
+      await Beacon.initialize(
+        apiKey: 'test_key',
+        baseUrl: 'https://example.com',
+        batchSize: 1,
+        httpClient: client,
+        database: database,
+        deviceContext: context,
+      );
+
+      await Beacon.instance.push(eventName: 'one', funnel: 'f', type: 't');
+      expect(batches, hasLength(1));
+
+      // Relaunch against the same queue; this time the upload is accepted.
+      status = 202;
+      await Beacon.initialize(
+        apiKey: 'test_key',
+        baseUrl: 'https://example.com',
+        batchSize: 1,
+        httpClient: client,
+        database: database,
+        deviceContext: context,
+      );
+
+      expect(batches, hasLength(2));
+      final first = batches[0][0] as Map<String, dynamic>;
+      final second = batches[1][0] as Map<String, dynamic>;
+      expect(second['eventId'], first['eventId']);
+      expect(second['timestamp'], first['timestamp']);
+      expect(await database.pendingCount(), 0);
+    });
+
+    test('v1 to v2 migration adds the column and backfills queued rows',
+        () async {
+      // A database as an older SDK version left it: no event_id column, one
+      // row still queued, schema stamped at v1.
+      final raw = sqlite3.openInMemory();
+      raw.execute('''
+        CREATE TABLE pending_events (
+          id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          event_name TEXT NOT NULL,
+          funnel TEXT NOT NULL,
+          uid TEXT NOT NULL,
+          email TEXT NOT NULL,
+          session_token TEXT NOT NULL,
+          timestamp TEXT NOT NULL,
+          properties_json TEXT NOT NULL
+        );
+      ''');
+      raw.execute('''
+        INSERT INTO pending_events
+          (event_name, funnel, uid, email, session_token, timestamp,
+           properties_json)
+        VALUES ('queued_before_upgrade', 'f', 'u', 'e', 's',
+                '2026-01-01T00:00:00Z', '{}');
+      ''');
+      raw.execute('PRAGMA user_version = 1');
+
+      final database = BeaconDatabase(executor: NativeDatabase.opened(raw));
+      addTearDown(database.close);
+
+      final rows = await database.allPending();
+      expect(rows, hasLength(1));
+      // The pre-existing row keeps its data and gains a real id.
+      expect(rows.single.eventName, 'queued_before_upgrade');
+      expect(rows.single.timestamp, '2026-01-01T00:00:00Z');
+      expect(rows.single.eventId, matches(_uuidV4));
+    });
+  });
 }
 
 /// Stand-in for a transport failure; MockClient has no built-in way to throw
 /// a network error, and the SDK only cares that *something* was thrown.
 class SocketExceptionStub implements Exception {
   const SocketExceptionStub();
+}
+
+final RegExp _uuidV4 = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+);
+
+/// Stands in for the on-disk queue, which keeps its rows across a close; the
+/// in-memory one drops them, which is the thing under test.
+class _PersistentDatabase extends BeaconDatabase {
+  _PersistentDatabase() : super.memory();
+
+  @override
+  Future<void> close() async {}
 }

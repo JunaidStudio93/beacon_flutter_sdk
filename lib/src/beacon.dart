@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
@@ -118,8 +119,12 @@ class Beacon {
       if (properties != null) ...properties,
     };
 
+    // Minted here, at creation, not at upload: the id is stored alongside the
+    // event, so an event resent after a suspended-before-202 launch arrives
+    // with the id it was born with and the backend can drop it.
     await _database.insertEvent(
       PendingEventsCompanion.insert(
+        eventId: Value(const Uuid().v4()),
         eventName: sanitizeName(eventName),
         funnel: sanitizeName(funnel),
         uid: uid,
@@ -224,6 +229,7 @@ class Beacon {
     final events = rows
         .map(
           (row) => BeaconEvent.fromStored(
+            eventId: row.eventId,
             eventName: row.eventName,
             uid: row.uid,
             funnel: row.funnel,
