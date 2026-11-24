@@ -585,6 +585,62 @@ void main() {
       expect(rows.single.eventId, matches(_uuidV4));
     });
   });
+
+  /// Analytics must never break the calling app. Every storage failure is
+  /// logged and swallowed; the only things [Beacon.push] and [Beacon.flush]
+  /// may raise are programming errors.
+  group('a database that fails', () {
+    tearDown(() async {
+      if (Beacon.isInitialized) {
+        await Beacon.instance.dispose();
+      }
+    });
+
+    Future<Beacon> start(BeaconDatabase database) {
+      return Beacon.initialize(
+        apiKey: 'k',
+        baseUrl: 'https://example.test',
+        database: database,
+        deviceContext: const DeviceContext(
+          platform: 'test',
+          appVersion: '1.0.0',
+          timezone: 'UTC',
+        ),
+        httpClient: MockClient((_) async => http.Response('', 202)),
+      );
+    }
+
+    test('initialize survives a queue it cannot read', () async {
+      // initialize() flushes what the last session left behind. If that threw,
+      // an app awaiting Beacon.initialize() at startup would come up with no
+      // analytics at all, or fail to come up.
+      final beacon = await start(_BrokenDatabase(_Fails.read));
+      expect(Beacon.isInitialized, isTrue);
+      await expectLater(beacon.flush(), completes);
+    });
+
+    test('push does not throw when the event cannot be stored', () async {
+      final beacon = await start(_BrokenDatabase(_Fails.insert));
+      await expectLater(
+        beacon.push(eventName: 'checkout', funnel: 'shop', type: 'tap'),
+        completes,
+      );
+    });
+
+    test('push keeps the event when only the flush decision fails', () async {
+      final database = _BrokenDatabase(_Fails.count);
+      final beacon = await start(database);
+
+      await expectLater(
+        beacon.push(eventName: 'checkout', funnel: 'shop', type: 'tap'),
+        completes,
+      );
+
+      // The row was written before the count was asked for, so it is still
+      // queued and the next launch sends it.
+      expect(await database.allPending(), hasLength(1));
+    });
+  });
 }
 
 /// Stand-in for a transport failure; MockClient has no built-in way to throw
@@ -604,4 +660,31 @@ class _PersistentDatabase extends BeaconDatabase {
 
   @override
   Future<void> close() async {}
+}
+
+enum _Fails { insert, count, read }
+
+/// A database whose one job is to fail at a chosen point.
+class _BrokenDatabase extends BeaconDatabase {
+  _BrokenDatabase(this.failAt) : super.memory();
+
+  final _Fails failAt;
+
+  @override
+  Future<int> insertEvent(PendingEventsCompanion entry) {
+    if (failAt == _Fails.insert) throw StateError('disk is full');
+    return super.insertEvent(entry);
+  }
+
+  @override
+  Future<int> pendingCount() {
+    if (failAt == _Fails.count) throw StateError('database is locked');
+    return super.pendingCount();
+  }
+
+  @override
+  Future<List<PendingEvent>> allPending() {
+    if (failAt == _Fails.read) throw StateError('database is corrupt');
+    return super.allPending();
+  }
 }
