@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -62,9 +63,23 @@ class BeaconDatabase extends _$BeaconDatabase {
   Future<void> _backfillEventIds() async {
     final rows =
         await (select(pendingEvents)..where((t) => t.eventId.equals(''))).get();
+
+    // Per row, and best effort. The column is the part inserts depend on and
+    // it exists by now; a row that cannot be given an id is left as it is
+    // rather than failing the migration and taking the whole queue with it.
+    // Such a row uploads with an empty id, which the backend treats as no id
+    // at all — the same place it would have been without this migration.
     for (final row in rows) {
-      await (update(pendingEvents)..where((t) => t.id.equals(row.id)))
-          .write(PendingEventsCompanion(eventId: Value(const Uuid().v4())));
+      try {
+        await (update(pendingEvents)..where((t) => t.id.equals(row.id)))
+            .write(PendingEventsCompanion(eventId: Value(const Uuid().v4())));
+      } catch (e, st) {
+        log(
+          'Beacon: could not backfill an event id',
+          error: e,
+          stackTrace: st,
+        );
+      }
     }
   }
 

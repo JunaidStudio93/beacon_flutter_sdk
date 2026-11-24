@@ -1,5 +1,17 @@
 ## Unreleased
 
+* A failing database no longer breaks the calling app. A failure to open, read
+  or write the local queue is logged and swallowed inside `push()` and
+  `flush()` — the same treatment network failures already had, and what this
+  SDK's own documentation claimed. Because `initialize()` flushes whatever the
+  last session left behind, this is also what let a device with unreadable
+  storage fail initialization outright and come up with no analytics at all.
+
+* The `eventId` backfill is per row and best effort. A row that cannot be
+  given an id is left as it is rather than failing the migration and taking
+  the whole queue with it; it uploads with an empty id, which is where it
+  would have been without the migration.
+
 * Add a unique `eventId` (UUID v4) to every event. It is generated when the
   event is created, stored in the local queue alongside it, and sent as a
   top-level field on `/track`. An event that is re-sent — because the app was

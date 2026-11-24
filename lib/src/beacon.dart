@@ -122,25 +122,41 @@ class Beacon {
     // Minted here, at creation, not at upload: the id is stored alongside the
     // event, so an event resent after a suspended-before-202 launch arrives
     // with the id it was born with and the backend can drop it.
-    await _database.insertEvent(
-      PendingEventsCompanion.insert(
-        eventId: Value(const Uuid().v4()),
-        eventName: sanitizeName(eventName),
-        funnel: sanitizeName(funnel),
-        uid: uid,
-        email: email,
-        sessionToken: _config.sessionToken,
-        timestamp: DateTime.now().toUtc().toIso8601String(),
-        propertiesJson: jsonEncode(props),
-      ),
-    );
+    try {
+      await _database.insertEvent(
+        PendingEventsCompanion.insert(
+          eventId: Value(const Uuid().v4()),
+          eventName: sanitizeName(eventName),
+          funnel: sanitizeName(funnel),
+          uid: uid,
+          email: email,
+          sessionToken: _config.sessionToken,
+          timestamp: DateTime.now().toUtc().toIso8601String(),
+          propertiesJson: jsonEncode(props),
+        ),
+      );
+    } catch (e, st) {
+      // The event is lost, and that is the right trade: a device whose local
+      // storage will not open is not a reason for the host app's checkout to
+      // throw. Logged rather than rethrown, like every other failure here.
+      log('Beacon: could not queue event; dropped', error: e, stackTrace: st);
+      return;
+    }
 
     if (immediate) {
       await flush();
       return;
     }
 
-    final count = await _database.pendingCount();
+    final int count;
+    try {
+      count = await _database.pendingCount();
+    } catch (e, st) {
+      // The row is already queued; only the decision to flush now is lost,
+      // and the next push or launch makes it again.
+      log('Beacon: could not read the pending count', error: e, stackTrace: st);
+      return;
+    }
     if (count >= _config.batchSize) {
       await flush();
     }
@@ -223,7 +239,22 @@ class Beacon {
   String get sessionToken => _config.sessionToken;
 
   Future<void> _flushInternal() async {
-    final rows = await _database.allPending();
+    // Storage failures stop here rather than travelling out through flush().
+    // initialize() awaits a flush, so a database that will not open would
+    // otherwise make initialization itself throw — and an app that awaits
+    // Beacon.initialize() at startup would come up with no analytics at all,
+    // or not come up.
+    final List<PendingEvent> rows;
+    try {
+      rows = await _database.allPending();
+    } catch (e, st) {
+      log(
+        'Beacon: could not read the queue; nothing uploaded',
+        error: e,
+        stackTrace: st,
+      );
+      return;
+    }
     if (rows.isEmpty) return;
 
     final events = rows
